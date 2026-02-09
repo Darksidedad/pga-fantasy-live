@@ -1,92 +1,117 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { encodeRosterToHash } from "../lib/shareLink";
+import { decodeRosterFromHash } from "../lib/shareLink";
+import {
+  buildGolferMapFromESPN,
+  findGolferLive,
+} from "../lib/scoring";
 
-const STORAGE_KEY = "pga_fantasy_roster_grid";
+type Golfer = {
+  name: string;
+  position?: string;
+  score?: string;
+};
 
-export default function AdminPage() {
-  const [grid, setGrid] = useState("");
-  const [shareUrl, setShareUrl] = useState<string>("");
-  const hash = useMemo(() => encodeRosterToHash(grid), [grid]);
+export default function Home() {
+  const [golfers, setGolfers] = useState<Golfer[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) setGrid(saved);
+    const hash = window.location.hash;
+    const decoded = decodeRosterFromHash(hash);
+
+    if (decoded) {
+      const names = decoded.split("\n").filter(Boolean);
+      const roster = names.map((name: string) => ({
+        name: name.trim(),
+      }));
+      setGolfers(roster);
+    }
+
+    setLoading(false);
   }, []);
 
-  function saveLocal() {
-    localStorage.setItem(STORAGE_KEY, grid);
-    alert("Saved on this device!");
-  }
+  useEffect(() => {
+    async function fetchLive() {
+      try {
+        const res = await fetch("/api/leaderboard");
+        const data = await res.json();
+        const golferMap = buildGolferMapFromESPN(data);
 
-  async function makeShareLink() {
-    const url = `${window.location.origin}/leaderboard${hash}`;
-    setShareUrl(url);
-
-    try {
-      await navigator.clipboard.writeText(url);
-      alert("Share link copied!");
-    } catch {
-      // ignore clipboard errors
+        setGolfers((prev) =>
+          prev.map((g) => {
+            const live = findGolferLive(g.name, golferMap);
+            return live
+              ? {
+                  ...g,
+                  position: live.position,
+                  score: live.score,
+                }
+              : g;
+          })
+        );
+      } catch (err) {
+        console.error("Failed to fetch leaderboard", err);
+      }
     }
-  }
 
-  function loadSample() {
-    // This is your current roster from the photo.
-    const sample = `Ryan | Scottie Scheffler | Wyndham Clark | Daniel Berger | Brian Harman
-Morris | Ben Griffin | Corey Conners | Kurt Kitayama | Max McGreevy
-Russ | Xander Schauffele | Jake Knapp | Michael Thorbjornsen | Keith Mitchell
-Seth | Brooks Koepka | Rickie Fowler | Matt McCarty | Samuel Stevens
-Sam | Cam Young | Matt Fitzpatrick | Nick Taylor | Min Woo Lee
-Kyle | Hideki Matsuyama | Si Woo Kim | Rasmus Højgaard | Pierceson Coody
-Justin | Viktor Hovland | Jordan Spieth | Christiaan Bezuidenhout | Andrew Novak
-Aaron | Collin Morikawa | Akshay Bhatia | Tom Kim | S.H. Kim
-Eric | Maverick McNealy | Harris English | Harry Hall | Takumi Kanaya
-Matt | J.J. Spaun | Sam Burns | J.T. Poston | Mac Meissner
-Chris | Tony Finau | Sahith Theegala | Jacob Bridgeman | Ryo Hisatsune
-Mike | Sepp Straka | Chris Gotterup | Matthieu Pavon | Chris Kirk`;
-    setGrid(sample);
+    fetchLive();
+    const interval = setInterval(fetchLive, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const sortedGolfers = useMemo(() => {
+    return [...golfers].sort((a, b) => {
+      const pa = parseInt(a.position || "999");
+      const pb = parseInt(b.position || "999");
+      return pa - pb;
+    });
+  }, [golfers]);
+
+  if (loading) {
+    return <div style={{ padding: 20 }}>Loading roster...</div>;
   }
 
   return (
-    <main style={{ padding: 20, maxWidth: 900 }}>
-      <h1>PGA Fantasy Admin</h1>
+    <div style={{ padding: 20, fontFamily: "sans-serif" }}>
+      <h1>Fantasy PGA Leaderboard</h1>
 
-      <p>
-        Paste rows like:
-        <br />
-        <code>Ryan | Scottie Scheffler | Wyndham Clark | Daniel Berger | Brian Harman</code>
-      </p>
-
-      <div style={{ marginBottom: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button onClick={loadSample}>Load sample roster</button>
-        <button onClick={saveLocal}>Save on this device</button>
-        <button onClick={makeShareLink}>Generate share link</button>
-        <a href={`/leaderboard${hash}`}>Open leaderboard</a>
-      </div>
-
-      <textarea
-        value={grid}
-        onChange={(e) => setGrid(e.target.value)}
-        rows={18}
-        style={{ width: "100%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" }}
-      />
-
-      {shareUrl && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Share this link (works on your phone):</div>
-          <input
-            value={shareUrl}
-            readOnly
-            style={{ width: "100%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace" }}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
-            Tip: open this link in Safari → Share → <b>Add to Home Screen</b>.
-          </div>
-        </div>
-      )}
-    </main>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          marginTop: 20,
+        }}
+      >
+        <thead>
+          <tr>
+            <th style={th}>Player</th>
+            <th style={th}>Position</th>
+            <th style={th}>Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedGolfers.map((g, i) => (
+            <tr key={i}>
+              <td style={td}>{g.name}</td>
+              <td style={td}>{g.position || "-"}</td>
+              <td style={td}>{g.score || "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
+
+const th: React.CSSProperties = {
+  borderBottom: "1px solid #ccc",
+  padding: "8px",
+  textAlign: "left",
+};
+
+const td: React.CSSProperties = {
+  borderBottom: "1px solid #eee",
+  padding: "8px",
+};
