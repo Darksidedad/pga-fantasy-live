@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { encodeRosterToHash } from "@/lib/shareLink";
+import { encodeRosterToHash } from "../lib/shareLink";
 
 const STORAGE_KEY = "pga_fantasy_roster_grid";
 
