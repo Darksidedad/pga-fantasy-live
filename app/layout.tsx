@@ -1,12 +1,12 @@
+import type { Metadata } from "next";
 import "./globals.css";
-import type { ReactNode } from "react";
 
-export const metadata = {
-  title: "Fantasy PGA",
-  description: "Live fantasy PGA leaderboard",
+export const metadata: Metadata = {
+  title: "PGA Fantasy Live",
+  description: "Live fantasy scoring (top 3) for PGA events"
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>{children}</body>
